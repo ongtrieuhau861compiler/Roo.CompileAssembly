@@ -13,8 +13,8 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("04c0a613-35ae-412a-92cd-e81c6ac90dde")]
-[assembly: AssemblyVersion("1.19.10.9")]
-[assembly: AssemblyFileVersion("1.19.10.9")]
+[assembly: AssemblyVersion("1.19.10.10")]
+[assembly: AssemblyFileVersion("1.19.10.10")]
 namespace Roo.CompileAssembly
 {
     public class Compiler
