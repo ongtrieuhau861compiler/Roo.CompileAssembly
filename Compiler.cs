@@ -17,6 +17,15 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyFileVersion("1.19.10.10")]
 namespace Roo.CompileAssembly
 {
+    public enum v_InfoAssembly
+    {
+        Title, Description, Configuration, Company, Product,
+        Copyright, Trademark, Culture, Version, FileVersion
+    }
+    public enum v_KindBuildAssembly
+    {
+        ByCodeProvider, ByCommandCSC
+    }
     public partial class Compiler
     {
         /// <summary>
@@ -32,12 +41,47 @@ namespace Roo.CompileAssembly
                 value = value + "\"";
             return value;
         }
+        public static string GetBetweenStringsFirstForce(string inputString, string start, string end)
+        {
+            try
+            {
+                var inputStringUpper = (inputString + "").ToUpper();
+                var startUpper = (start + "").ToUpper();
+                var endUpper = (end + "").ToUpper();
+                if (startUpper == "" || endUpper == "") return "";
+                if (inputStringUpper.Contains(startUpper) == false || inputStringUpper.Contains(endUpper) == false) return "";
+                int p1 = inputStringUpper.IndexOf(startUpper) + startUpper.Length;
+                int p2 = inputStringUpper.IndexOf(endUpper, p1);
+
+                if (end == "") return (inputString.Substring(p1));
+                else return inputString.Substring(p1, p2 - p1);
+            }
+            catch
+            {
+                return "";
+            }
+        }
+        public static string GetInfoAssemblyFromCode(string codeCs, v_InfoAssembly v_InfoAssembly)
+        {
+            return Compiler.GetBetweenStringsFirstForce(codeCs, string.Format("[assembly: Assembly{0}(\"", v_InfoAssembly.ToString()), "\")]");
+        }
+        public static string GetInfoAssemblyFromCodeReturnCs(string codeCs, v_InfoAssembly v_InfoAssembly)
+        {
+            var start = string.Format("[assembly: Assembly{0}(\"", v_InfoAssembly.ToString());
+            var end = "\")]";
+            var contentBetween = Compiler.GetBetweenStringsFirstForce(codeCs, start, end);
+            if (contentBetween != "")
+                return start + contentBetween + end;
+            return "";
+        }
         public Compiler() { }
-        public string OutputAssembly { get; set; } = "";
+        public string OutputAssembly { get; set; }
         public List<string> ReferencedAssemblies { get; set; }
         public List<string> SourceFiles { get; set; }
+        public List<string> SourceFilesBuildTemp { get; set; }
         public string PathWin32Icon { get; set; }
-        public string CreateOptionWin32Icon()
+
+        private string CreateOptionWin32Icon()
         {
             if (this.PathWin32Icon + "" == "") return "";
             try
@@ -48,6 +92,32 @@ namespace Roo.CompileAssembly
             }
             catch { }
             return "";
+        }
+        private string CreateSourceFilesBuildTemp(DateTime dateTimeBuild, v_KindBuildAssembly v_KindBuildAssembly)
+        {
+            var pathDirSourceFilesBuildTemp = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                System.Reflection.Assembly.GetEntryAssembly().EntryPoint.DeclaringType.Namespace,
+                v_KindBuildAssembly.ToString(),
+                "Roo.CompileAssembly", dateTimeBuild.ToString("yyyy-MM-dd-HH-mm-ss-fff", System.Globalization.CultureInfo.InvariantCulture));
+            try { System.IO.Directory.Delete(pathDirSourceFilesBuildTemp, true); } catch { }
+            try { System.IO.Directory.CreateDirectory(pathDirSourceFilesBuildTemp); } catch { }
+            this.SourceFilesBuildTemp = new List<string>();
+            this.SourceFiles.ForEach(x =>
+            {
+                var destFileName = System.IO.Path.Combine(pathDirSourceFilesBuildTemp, System.IO.Path.GetRandomFileName() + "." + System.IO.Path.GetFileName(x));
+                var contentSource = System.IO.File.ReadAllText(x);
+                var codeAssemblyTitle = Compiler.GetInfoAssemblyFromCodeReturnCs(contentSource, v_InfoAssembly.Title);
+                if (codeAssemblyTitle != "")
+                {
+                    var contentAssemblyTitle = Compiler.GetInfoAssemblyFromCode(codeAssemblyTitle, v_InfoAssembly.Title);
+                    var codeAssemblyTitleAddBuild = codeAssemblyTitle.Replace(contentAssemblyTitle, contentAssemblyTitle + string.Format("[build.{0}]", v_KindBuildAssembly.ToString()));
+                    contentSource = contentSource.Replace(codeAssemblyTitle, codeAssemblyTitleAddBuild);
+                }
+                System.IO.File.WriteAllText(destFileName, contentSource, System.Text.Encoding.Unicode);
+                this.SourceFilesBuildTemp.Add(destFileName);
+            });
+            return pathDirSourceFilesBuildTemp;
         }
 
         private List<string> f_ReferencedAssemblyDirs = null;
@@ -94,9 +164,6 @@ namespace Roo.CompileAssembly
             {
                 System.CodeDom.Compiler.CompilerParameters compilerParameters = new System.CodeDom.Compiler.CompilerParameters();
 
-                // Generate an executable instead of 
-                // a class library.
-                compilerParameters.GenerateExecutable = true;
                 // Save the assembly as a physical file.
                 compilerParameters.GenerateInMemory = false;
                 // Set whether to treat all warnings as errors.
@@ -112,6 +179,13 @@ namespace Roo.CompileAssembly
                     sourceFirst.Name.Replace(".", "_"));
                 }
                 compilerParameters.CompilerOptions = string.Format("/optimize {0}", this.CreateOptionWin32Icon());
+
+                // Generate an executable instead of 
+                // a class library.
+                if (this.OutputAssembly.ToUpper().EndsWith("EXE"))
+                    compilerParameters.GenerateExecutable = true;
+                else
+                    compilerParameters.GenerateExecutable = false;
 
                 // Set reference dll
                 if (this.ReferencedAssemblies != null &&
@@ -148,12 +222,12 @@ namespace Roo.CompileAssembly
                         compilerParameters.ReferencedAssemblies.Add(x);
                 });
                 // Invoke compilation of the source file.
+                this.CreateSourceFilesBuildTemp(DateTime.Now, v_KindBuildAssembly.ByCodeProvider);
                 this.CompilerResults = provider.CompileAssemblyFromFile(compilerParameters,
-                    this.SourceFiles.ToArray());
+                    this.SourceFilesBuildTemp.ToArray());
                 compileOk = !(this.CompilerResults.Errors.Count > 0);
             }
             return compileOk;
         }
-
     }
 }
