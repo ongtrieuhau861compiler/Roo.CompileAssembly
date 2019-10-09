@@ -17,7 +17,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyFileVersion("1.19.10.10")]
 namespace Roo.CompileAssembly
 {
-    public class Compiler
+    public partial class Compiler
     {
         /// <summary>
         /// Trả về chuỗi có dấu " ở đầu và cuối chuỗi (Có kiểm tra không có mới thêm)
@@ -155,30 +155,5 @@ namespace Roo.CompileAssembly
             return compileOk;
         }
 
-        private string GetRuntimeCSCexe() { return System.IO.Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "csc.exe"); }
-        public bool CompileAssemblyByCSC()
-        {
-            bool compileOk = false;
-            if (this.SourceFiles.Any() == false)
-                return compileOk;
-            this.SourceFiles.ForEach(x =>
-            {
-                x = Compiler.AddDoubleQuotesForce(x);
-            });
-            var pathFileCodeCs = string.Join(" ", this.SourceFiles.ToArray());
-
-            System.Diagnostics.Process proc;
-            System.Diagnostics.ProcessStartInfo psiUser = new System.Diagnostics.ProcessStartInfo(this.GetRuntimeCSCexe())
-            {
-                Arguments = string.Format("-out:{0} {1} {2}", Compiler.AddDoubleQuotesForce(this.OutputAssembly), this.CreateOptionWin32Icon(), pathFileCodeCs),
-                WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            proc = new System.Diagnostics.Process() { StartInfo = psiUser };
-            proc.Start();
-            compileOk = true;
-            return compileOk;
-        }
     }
 }
