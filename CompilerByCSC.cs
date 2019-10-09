@@ -14,6 +14,11 @@ namespace Roo.CompileAssembly
                 return "-target:exe";
             return "-target:library";
         }
+
+        /// <summary>
+        /// Build code bằng commandpromt: gọi file Csc.exe trong thư mục mặc định khi cài Framework 4.0
+        /// </summary>
+        /// <returns></returns>
         public bool CompileAssemblyByCSC()
         {
             bool compileOk = false;
@@ -43,6 +48,17 @@ namespace Roo.CompileAssembly
                 proc.Start();
                 proc.WaitForExit();
                 compileOk = true;
+                if (compileOk && System.IO.File.Exists(this.OutputAssembly))
+                {
+                    if (this.AssemblyFileVersionCode == "")
+                        compileOk = true;
+                    else
+                        compileOk = Compiler.CompareStringVersion(this.AssemblyFileVersionCode, Compiler.GetVersionStringFile(this.OutputAssembly));
+                }
+                else
+                {
+                    compileOk = false;
+                }
                 return compileOk;
             }
             catch
@@ -51,7 +67,7 @@ namespace Roo.CompileAssembly
             }
             finally
             {
-                try { Compiler.DirectoryDeleteForce(pathDirTemp); } catch { }
+                try { Compiler.DirectoryDeleteForce(System.IO.Path.GetDirectoryName(System.IO.Path.GetDirectoryName(pathDirTemp))); } catch { }
             }
         }
     }

@@ -13,8 +13,8 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: Guid("04c0a613-35ae-412a-92cd-e81c6ac90dde")]
-[assembly: AssemblyVersion("1.19.10.10")]
-[assembly: AssemblyFileVersion("1.19.10.10")]
+[assembly: AssemblyVersion("1.19.10.1")]
+[assembly: AssemblyFileVersion("1.19.10.2")]
 namespace Roo.CompileAssembly
 {
     public enum v_InfoAssembly
@@ -113,6 +113,12 @@ namespace Roo.CompileAssembly
                 try { System.IO.Directory.Delete(path, true); } catch { }
                 if (System.IO.Directory.Exists(path))
                 {
+                    var allDirs = System.IO.Directory.GetDirectories(path, "*.*", System.IO.SearchOption.TopDirectoryOnly);
+                    if (allDirs != null && allDirs.Any())
+                    {
+                        foreach (var pathDir in allDirs)
+                            try { System.IO.Directory.Delete(pathDir); } catch { }
+                    }
                     var allFiles = System.IO.Directory.GetFiles(path, "*.*", System.IO.SearchOption.AllDirectories);
                     if (allFiles != null && allFiles.Any())
                     {
@@ -124,12 +130,82 @@ namespace Roo.CompileAssembly
             };
             backgroundWorker.RunWorkerAsync();
         }
+        /// <summary>
+        /// Tìm version File của tập tin (FileVersionInfo.GetVersionInfo(pathFile)), Exception trả về rỗng
+        /// </summary>
+        /// <param name="pathFile"></param>
+        /// <returns></returns>
+        public static string GetVersionStringFile(string pathFile)
+        {
+            try
+            {
+                if (System.IO.File.Exists(pathFile) == false) return "";
+                return System.Diagnostics.FileVersionInfo.GetVersionInfo(pathFile).FileVersion;
+            }
+            catch
+            {
+                return "";
+            }
+        }
+        /// <summary>
+        /// So sánh 2 Version dạng string
+        /// 1.So sánh dạng chuỗi, nếu đúng trả về True
+        /// 2.Kiểm tra nếu có chứa ký tự . thì kiểm tra tiếp, ngược lại trả về False
+        /// 3.Cắt chuỗi bởi ký tự .
+        /// 4.So sánh từng thành phần cắt ra, nếu so sánh chuỗi giống nhau thì được, ngược lại convert sang dạng số để so sánh, Exception convert số thì là False
+        /// </summary>
+        /// <param name="version1"></param>
+        /// <param name="version2"></param>
+        /// <returns></returns>
+        public static bool CompareStringVersion(string version1, string version2)
+        {
+            var f_version1 = version1 + "";
+            var f_version2 = version2 + "";
+            if (f_version1 == f_version2)
+                return true;
+            if (f_version1.Contains(".") == false || f_version2.Contains(".") == false)
+                return false;
+            var split_version1 = f_version1.Split('.');
+            var split_version2 = f_version2.Split('.');
+            if (split_version1.Length != split_version2.Length)
+                return false;
+            bool compareItemSplit = true;
+            for (int i = 0; i < split_version1.Length; i++)
+            {
+                if (split_version1[i] == split_version2[i])
+                {
+                    compareItemSplit = true;
+                }
+                else
+                {
+                    try { compareItemSplit = (Convert.ToInt16(split_version1[i]) == Convert.ToInt16(split_version2[i])); }
+                    catch
+                    {
+                        compareItemSplit = false;
+                    }
+                }
+                if (compareItemSplit == false)
+                    break;
+            }
+            return compareItemSplit;
+        }
         public Compiler() { }
         public string OutputAssembly { get; set; }
         public List<string> ReferencedAssemblies { get; set; }
         public List<string> SourceFiles { get; set; }
         public List<string> SourceFilesBuildTemp { get; set; }
         public string PathWin32Icon { get; set; }
+        private string f_AssemblyVersionCode = "";
+        public string AssemblyVersionCode
+        {
+            get { return this.f_AssemblyVersionCode; }
+        }
+        private string f_AssemblyFileVersionCode = "";
+        public string AssemblyFileVersionCode
+        {
+            get { return this.f_AssemblyFileVersionCode; }
+        }
+
 
         private string CreateOptionWin32Icon()
         {
@@ -148,8 +224,9 @@ namespace Roo.CompileAssembly
             var pathDirSourceFilesBuildTemp = System.IO.Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                 System.Reflection.Assembly.GetEntryAssembly().EntryPoint.DeclaringType.Namespace,
+                "Roo.CompileAssembly",
                 v_KindBuildAssembly.ToString(),
-                "Roo.CompileAssembly", dateTimeBuild.ToString("yyyy-MM-dd-HH-mm-ss-fff", System.Globalization.CultureInfo.InvariantCulture));
+                dateTimeBuild.ToString("yyyy-MM-dd-HH-mm-ss-fff", System.Globalization.CultureInfo.InvariantCulture));
             try { System.IO.Directory.Delete(pathDirSourceFilesBuildTemp, true); } catch { }
             try { System.IO.Directory.CreateDirectory(pathDirSourceFilesBuildTemp); } catch { }
             this.SourceFilesBuildTemp = new List<string>();
@@ -157,6 +234,12 @@ namespace Roo.CompileAssembly
             {
                 var destFileName = System.IO.Path.Combine(pathDirSourceFilesBuildTemp, System.IO.Path.GetRandomFileName() + "." + System.IO.Path.GetFileName(x));
                 var contentSource = System.IO.File.ReadAllText(x);
+                var codeAssemblyVerion = Compiler.GetInfoAssemblyFromCode(contentSource, v_InfoAssembly.Version);
+                if (codeAssemblyVerion + "" != "")
+                    this.f_AssemblyVersionCode = codeAssemblyVerion;
+                var codeAssemblyFileVerion = Compiler.GetInfoAssemblyFromCode(contentSource, v_InfoAssembly.FileVersion);
+                if (codeAssemblyFileVerion + "" != "")
+                    this.f_AssemblyFileVersionCode = codeAssemblyFileVerion;
                 var codeAssemblyTitle = Compiler.GetInfoAssemblyFromCodeReturnCs(contentSource, v_InfoAssembly.Title);
                 if (codeAssemblyTitle != "")
                 {
@@ -203,6 +286,10 @@ namespace Roo.CompileAssembly
 
         public System.CodeDom.Compiler.CompilerResults CompilerResults { get; set; }
 
+        /// <summary>
+        /// Build code bằng Microsoft.CSharp.CSharpCodeProvider
+        /// </summary>
+        /// <returns></returns>
         public bool CompileAssembly()
         {
             bool compileOk = false;
@@ -279,6 +366,17 @@ namespace Roo.CompileAssembly
                     this.CompilerResults = provider.CompileAssemblyFromFile(compilerParameters,
                         this.SourceFilesBuildTemp.ToArray());
                     compileOk = !(this.CompilerResults.Errors.Count > 0);
+                    if (compileOk && System.IO.File.Exists(this.OutputAssembly))
+                    {
+                        if (this.AssemblyFileVersionCode == "")
+                            compileOk = true;
+                        else
+                            compileOk = Compiler.CompareStringVersion(this.AssemblyFileVersionCode, Compiler.GetVersionStringFile(this.OutputAssembly));
+                    }
+                    else
+                    {
+                        compileOk = false;
+                    }
                 }
                 return compileOk;
             }
@@ -288,7 +386,7 @@ namespace Roo.CompileAssembly
             }
             finally
             {
-                Compiler.DirectoryDeleteForce(pathDirTemp);
+                try { Compiler.DirectoryDeleteForce(System.IO.Path.GetDirectoryName(System.IO.Path.GetDirectoryName(pathDirTemp))); } catch { }
             }
         }
     }
