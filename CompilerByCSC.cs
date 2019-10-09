@@ -45,10 +45,13 @@ namespace Roo.CompileAssembly
                 compileOk = true;
                 return compileOk;
             }
-            catch { }
+            catch
+            {
+                return compileOk;
+            }
             finally
             {
-                try { System.IO.Directory.Delete(pathDirTemp, true); } catch { }
+                try { Compiler.DirectoryDeleteForce(pathDirTemp); } catch { }
             }
         }
     }
