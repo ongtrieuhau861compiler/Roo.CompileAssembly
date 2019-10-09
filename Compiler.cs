@@ -74,6 +74,19 @@ namespace Roo.CompileAssembly
                 return start + contentBetween + end;
             return "";
         }
+        public static void DirectoryDeleteForce(string path)
+        {
+            try { System.IO.Directory.Delete(path, true); } catch { }
+            if (System.IO.Directory.Exists(path))
+            {
+                var allFiles = System.IO.Directory.GetFiles(path, "*.*", System.IO.SearchOption.AllDirectories);
+                if (allFiles != null && allFiles.Any())
+                {
+                    foreach (var pathFile in allFiles)
+                        try { System.IO.File.Delete(pathFile); } catch { }
+                }
+            }
+        }
         public Compiler() { }
         public string OutputAssembly { get; set; }
         public List<string> ReferencedAssemblies { get; set; }
@@ -159,75 +172,84 @@ namespace Roo.CompileAssembly
             if (this.SourceFiles.Any() == false)
                 return compileOk;
             this.CompilerResults = null;
-            Microsoft.CSharp.CSharpCodeProvider provider = new Microsoft.CSharp.CSharpCodeProvider();
-            if (provider != null)
+            var pathDirTemp = this.CreateSourceFilesBuildTemp(DateTime.Now, v_KindBuildAssembly.ByCodeProvider);
+
+            try
             {
-                System.CodeDom.Compiler.CompilerParameters compilerParameters = new System.CodeDom.Compiler.CompilerParameters();
-
-                // Save the assembly as a physical file.
-                compilerParameters.GenerateInMemory = false;
-                // Set whether to treat all warnings as errors.
-                compilerParameters.TreatWarningsAsErrors = false;
-                // Specify the assembly file name to generate.
-                if (this.OutputAssembly + "" != "")
-                    compilerParameters.OutputAssembly = this.OutputAssembly;
-                else
+                Microsoft.CSharp.CSharpCodeProvider provider = new Microsoft.CSharp.CSharpCodeProvider();
+                if (provider != null)
                 {
-                    var sourceFirst = new System.IO.FileInfo(this.SourceFiles.First());
-                    compilerParameters.OutputAssembly = String.Format(@"{0}\{1}.exe",
-                    System.Environment.CurrentDirectory,
-                    sourceFirst.Name.Replace(".", "_"));
-                }
-                compilerParameters.CompilerOptions = string.Format("/optimize {0}", this.CreateOptionWin32Icon());
+                    System.CodeDom.Compiler.CompilerParameters compilerParameters = new System.CodeDom.Compiler.CompilerParameters();
 
-                // Generate an executable instead of 
-                // a class library.
-                if (this.OutputAssembly.ToUpper().EndsWith("EXE"))
-                    compilerParameters.GenerateExecutable = true;
-                else
-                    compilerParameters.GenerateExecutable = false;
-
-                // Set reference dll
-                if (this.ReferencedAssemblies != null &&
-                    this.ReferencedAssemblies.Any())
-                {
-                    foreach (string itemValue in this.ReferencedAssemblies)
+                    // Save the assembly as a physical file.
+                    compilerParameters.GenerateInMemory = false;
+                    // Set whether to treat all warnings as errors.
+                    compilerParameters.TreatWarningsAsErrors = false;
+                    // Specify the assembly file name to generate.
+                    if (this.OutputAssembly + "" != "")
+                        compilerParameters.OutputAssembly = this.OutputAssembly;
+                    else
                     {
-                        var item = itemValue + "";
-                        if (item.ToUpper().EndsWith(".dll".ToUpper()) == false && item.ToUpper().EndsWith(".exe".ToUpper()) == false)
-                            item = item + ".dll";
-                        if (System.IO.File.Exists(item))
-                            compilerParameters.ReferencedAssemblies.Add(item);
-                        else if (this.ReferencedAssemblyNoPaths.Where(x => x.ToUpper().Contains(item.ToUpper())).Any())
+                        var sourceFirst = new System.IO.FileInfo(this.SourceFiles.First());
+                        compilerParameters.OutputAssembly = String.Format(@"{0}\{1}.exe",
+                        System.Environment.CurrentDirectory,
+                        sourceFirst.Name.Replace(".", "_"));
+                    }
+                    compilerParameters.CompilerOptions = string.Format("/optimize {0}", this.CreateOptionWin32Icon());
+
+                    // Generate an executable instead of 
+                    // a class library.
+                    if (this.OutputAssembly.ToUpper().EndsWith("EXE"))
+                        compilerParameters.GenerateExecutable = true;
+                    else
+                        compilerParameters.GenerateExecutable = false;
+
+                    // Set reference dll
+                    if (this.ReferencedAssemblies != null &&
+                        this.ReferencedAssemblies.Any())
+                    {
+                        foreach (string itemValue in this.ReferencedAssemblies)
                         {
-                            compilerParameters.ReferencedAssemblies.Add(item);
-                        }
-                        else
-                        {
-                            foreach (var pathDir in this.ReferencedAssemblyDirs)
+                            var item = itemValue + "";
+                            if (item.ToUpper().EndsWith(".dll".ToUpper()) == false && item.ToUpper().EndsWith(".exe".ToUpper()) == false)
+                                item = item + ".dll";
+                            if (System.IO.File.Exists(item))
+                                compilerParameters.ReferencedAssemblies.Add(item);
+                            else if (this.ReferencedAssemblyNoPaths.Where(x => x.ToUpper().Contains(item.ToUpper())).Any())
                             {
-                                var pathFile = System.IO.Path.Combine(pathDir, item);
-                                if (System.IO.File.Exists(pathFile))
+                                compilerParameters.ReferencedAssemblies.Add(item);
+                            }
+                            else
+                            {
+                                foreach (var pathDir in this.ReferencedAssemblyDirs)
                                 {
-                                    compilerParameters.ReferencedAssemblies.Add(pathFile);
-                                    break;
+                                    var pathFile = System.IO.Path.Combine(pathDir, item);
+                                    if (System.IO.File.Exists(pathFile))
+                                    {
+                                        compilerParameters.ReferencedAssemblies.Add(pathFile);
+                                        break;
+                                    }
                                 }
                             }
                         }
                     }
+                    this.ReferencedAssemblyNoPaths.ForEach(x =>
+                    {
+                        if (compilerParameters.ReferencedAssemblies.Contains(x) == false)
+                            compilerParameters.ReferencedAssemblies.Add(x);
+                    });
+                    // Invoke compilation of the source file.
+                    this.CompilerResults = provider.CompileAssemblyFromFile(compilerParameters,
+                        this.SourceFilesBuildTemp.ToArray());
+                    compileOk = !(this.CompilerResults.Errors.Count > 0);
                 }
-                this.ReferencedAssemblyNoPaths.ForEach(x =>
-                {
-                    if (compilerParameters.ReferencedAssemblies.Contains(x) == false)
-                        compilerParameters.ReferencedAssemblies.Add(x);
-                });
-                // Invoke compilation of the source file.
-                this.CreateSourceFilesBuildTemp(DateTime.Now, v_KindBuildAssembly.ByCodeProvider);
-                this.CompilerResults = provider.CompileAssemblyFromFile(compilerParameters,
-                    this.SourceFilesBuildTemp.ToArray());
-                compileOk = !(this.CompilerResults.Errors.Count > 0);
+                return compileOk;
             }
-            return compileOk;
+            catch { }
+            finally
+            {
+
+            }
         }
     }
 }

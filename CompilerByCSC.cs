@@ -22,25 +22,34 @@ namespace Roo.CompileAssembly
             var pathCSCExe = this.GetRuntimeCSCexe();
             if (System.IO.File.Exists(pathCSCExe) == false)
                 return compileOk;
-            this.CreateSourceFilesBuildTemp(DateTime.Now, v_KindBuildAssembly.ByCommandCSC);
-            this.SourceFilesBuildTemp.ForEach(x =>
+            var pathDirTemp = this.CreateSourceFilesBuildTemp(DateTime.Now, v_KindBuildAssembly.ByCommandCSC);
+            try
             {
-                x = Compiler.AddDoubleQuotesForce(x);
-            });
-            var pathFileCodeCs = string.Join(" ", this.SourceFilesBuildTemp.ToArray());
+                this.SourceFilesBuildTemp.ForEach(x =>
+                {
+                    x = Compiler.AddDoubleQuotesForce(x);
+                });
+                var pathFileCodeCs = string.Join(" ", this.SourceFilesBuildTemp.ToArray());
 
-            System.Diagnostics.Process proc;
-            System.Diagnostics.ProcessStartInfo psiUser = new System.Diagnostics.ProcessStartInfo(pathCSCExe)
+                System.Diagnostics.Process proc;
+                System.Diagnostics.ProcessStartInfo psiUser = new System.Diagnostics.ProcessStartInfo(pathCSCExe)
+                {
+                    Arguments = string.Format("{0} -out:{1} {2} {3}", this.CreateTargetCommand(), Compiler.AddDoubleQuotesForce(this.OutputAssembly), this.CreateOptionWin32Icon(), pathFileCodeCs),
+                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                proc = new System.Diagnostics.Process() { StartInfo = psiUser };
+                proc.Start();
+                proc.WaitForExit();
+                compileOk = true;
+                return compileOk;
+            }
+            catch { }
+            finally
             {
-                Arguments = string.Format("{0} -out:{1} {2} {3}", this.CreateTargetCommand(), Compiler.AddDoubleQuotesForce(this.OutputAssembly), this.CreateOptionWin32Icon(), pathFileCodeCs),
-                WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            proc = new System.Diagnostics.Process() { StartInfo = psiUser };
-            proc.Start();
-            compileOk = true;
-            return compileOk;
+                try { System.IO.Directory.Delete(pathDirTemp, true); } catch { }
+            }
         }
     }
 }
